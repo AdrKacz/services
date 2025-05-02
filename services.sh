@@ -43,11 +43,17 @@ start_service() {
     local plist_name
     plist_name=$(generate_plist_name "$script_path")
 
+    # Verify it doesn't already run
+    local status=$(launchctl list | grep "$plist_name")
+    local status_code=$(echo "$status" | awk '{print $2}')
+    if [ "$status_code" -eq 0 ]; then
+      echo "Error: Script is already running"
+      return 1
+    fi
+
     # Prepare log paths
-    local absolute_path=$(realpath "$script_path")
-    mkdir -p ".logs"
-    local stdout_path="$absolute_path/.logs/$(basename "$script_path").stdout.log"
-    local stderr_path="$absolute_path/.logs/$(basename "$script_path").stderr.log"
+    local absolute_script_path=$(realpath "$script_path")
+    local absolute_folder_path=$(dirname "$absolute_script_path")
 
     # Read and replace placeholders in template
     if [[ ! -f "$TEMPLATE_FILE" ]]; then
@@ -58,9 +64,8 @@ start_service() {
     local plist_content
     plist_content=$(< "$template_file")
     plist_content=${plist_content//\{\{PLIST_NAME\}\}/$plist_name}
-    plist_content=${plist_content//\{\{ABSOLUTE_PATH\}\}/$absolute_path}
-    plist_content=${plist_content//\{\{STDOUT_PATH\}\}/$stdout_path}
-    plist_content=${plist_content//\{\{STDERR_PATH\}\}/$stderr_path}
+    plist_content=${plist_content//\{\{ABSOLUTE_SCRIPT_PATH\}\}/$absolute_script_path}
+    plist_content=${plist_content//\{\{ABSOLUTE_FOLDER_PATH\}\}/$absolute_folder_path}
 
     # Write the generated plist
     echo "$plist_content" > "$PLIST_DIR/$plist_name.plist"
@@ -69,7 +74,7 @@ start_service() {
     launchctl load "$PLIST_DIR/$plist_name.plist"
 
     # Save mapping to meta file
-    echo "$plist_name|$absolute_path" >> "$META_FILE"
+    echo "$plist_name|$absolute_script_path" >> "$META_FILE"
 
     echo "Started service: $plist_name"
 }
